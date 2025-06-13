@@ -39,6 +39,7 @@ class Twitter_Scraper:
         password,
         headlessState,
         max_tweets=50,
+        save_folder_path="./tweets/",
         scrape_username=None,
         scrape_hashtag=None,
         scrape_query=None,
@@ -57,6 +58,7 @@ class Twitter_Scraper:
         self.tweet_ids = set()
         self.data = []
         self.tweet_cards = []
+        self.save_folder_path = save_folder_path
         self.scraper_details = {
             "type": None,
             "username": None,
@@ -183,15 +185,15 @@ class Twitter_Scraper:
                 # chromedriver_path = ChromeDriverManager().install()
                 # chrome_service = ChromeService(executable_path=chromedriver_path)
 
-                print("Downloading FirefoxDriver...")
-                firefoxdriver_path = GeckoDriverManager().install()
-                firefox_service = FirefoxService(executable_path=firefoxdriver_path)
-
                 # print("Initializing ChromeDriver...")
                 # driver = webdriver.Chrome(
                 #     service=chrome_service,
                 #     options=browser_option,
                 # )
+
+                print("Downloading FirefoxDriver...")
+                firefoxdriver_path = GeckoDriverManager().install()
+                firefox_service = FirefoxService(executable_path=firefoxdriver_path)
 
                 print("Initializing FirefoxDriver...")
                 driver = webdriver.Firefox(
@@ -503,6 +505,7 @@ It may be due to the following:
                                     "arguments[0].scrollIntoView();", card
                                 )
 
+                            import ipdb; ipdb.set_trace()
                             tweet = Tweet(
                                 card=card,
                                 driver=self.driver,
@@ -588,14 +591,140 @@ It may be due to the following:
 
         pass
 
-    def save_to_csv(self):
-        print("Saving Tweets to CSV...")
-        now = datetime.now()
-        folder_path = "./tweets/"
+    def scrape_tweet_conversation(
+        self,
+        tweet_url: str,
+        max_tweets: int = 50,
+    ):
+        """
+        given a tweet url get all the tweets within the conversation, i.e., 
+        the tweet's replies and possibly sub-threads, especially when author
+        has written sub-tweets.
+        logic is to get all tweets or up to max_tweets before the "Discover more" 
+        section: by observation it's found that the end of a thread is marked
+        by the start of the "Discover more" section (if present at all).
+        """
+        try:
+            # get the tweet
+            self.driver.get(tweet_url)
+            # wait for the tweet to load
+            sleep(3)
 
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
-            print("Created Folder: {}".format(folder_path))
+            # Prepare the conversation
+            conversation = []
+            seen_tweet_ids = set()  # Track processed tweet IDs to avoid duplicates
+            consecutive_empty_scrolls = 0
+            max_empty_scrolls = 3
+            discover_more_boundary = False
+            
+            # Main scrolling loop to collect tweets
+            while not discover_more_boundary and len(conversation) < max_tweets and consecutive_empty_scrolls < max_empty_scrolls:
+                # Look for "Show more" buttons and click them
+                show_more_buttons = self.driver.find_elements(
+                    "xpath", '//button[@data-testid="tweet-text-show-more-link"]'
+                )
+                
+                for button in show_more_buttons:
+                    try:
+                        # Scroll button into view to ensure it's clickable
+                        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
+                        sleep(0.5)
+                        
+                        # Click the button to expand content
+                        button.click()
+                        sleep(1)  # Wait for content to expand
+                    except Exception as e:
+                        # Handle any clicking errors gracefully
+                        continue 
+                
+                # Find the "Discover more" section position for boundary check
+                try:
+                    discover_more_element = self.driver.find_element(
+                        "xpath", '//span[text()="Discover more"]'
+                    )
+                    discover_more_position = discover_more_element.location['y']
+                except NoSuchElementException:
+                    # If "Discover more" not found, include all tweets
+                    discover_more_position = float('inf')
+                
+                # Get all current visible tweet cards
+                current_tweet_cards = self.driver.find_elements(
+                    "xpath", '//article[@data-testid="tweet" and not(@disabled)]'
+                )
+                
+                # Track how many new tweets we find in this iteration
+                new_tweets_found = 0
+                
+                # Process visible tweet cards
+                for card in current_tweet_cards:
+                    if len(conversation) >= max_tweets:
+                        break
+                    
+                    try:
+                        # Check if tweet is before "Discover more" boundary
+                        tweet_position = card.location['y']
+                        if tweet_position >= discover_more_position:
+                            # Skip tweets that are after "Discover more"
+                            discover_more_boundary = True
+                            break
+                        
+                        # Extract tweet ID using the same logic as Tweet class
+                        tweet_link = card.find_element(
+                            "xpath", ".//a[contains(@href, '/status/')]"
+                        ).get_attribute("href")
+                        tweet_id = str(tweet_link.split("/")[-1])
+                        
+                        # Skip if we've already processed this tweet
+                        if tweet_id in seen_tweet_ids:
+                            continue
+                        
+                        seen_tweet_ids.add(tweet_id)
+                        
+                        # Create Tweet object and process
+                        tweet = Tweet(
+                            card=card,
+                            driver=self.driver,
+                            actions=self.actions,
+                            scrape_poster_details=self.scraper_details["poster_details"],
+                        )
+                        
+                        if tweet and not tweet.error and tweet.tweet is not None:
+                            if not tweet.is_ad:
+                                conversation.append(tweet.tweet)
+                                new_tweets_found += 1
+                                
+                    except Exception as e:
+                        # Skip tweets we can't process
+                        continue
+                
+                # Update consecutive empty scroll counter
+                if new_tweets_found == 0:
+                    consecutive_empty_scrolls += 1
+                else:
+                    consecutive_empty_scrolls = 0
+                
+                # Scroll down to load more tweets (unless we've hit limits)
+                if not discover_more_boundary and len(conversation) < max_tweets and consecutive_empty_scrolls < max_empty_scrolls:
+                    self.driver.execute_script("window.scrollBy(0, 1000);")
+                    sleep(2)
+            
+            return conversation
+        
+        except KeyboardInterrupt:
+            print("\n")
+            print("Keyboard Interrupt")
+        
+        except Exception as e:
+            print("\n")
+            print(f"Error scraping tweets: {e}")
+
+    
+    def _save_helper(self):
+        now = datetime.now()
+
+        if not os.path.exists(self.save_folder_path):
+            os.makedirs(self.save_folder_path)
+            print("Created Folder: {}".format(self.save_folder_path))
 
         data = {
             "Name": [tweet[0] for tweet in self.data],
@@ -623,13 +752,24 @@ It may be due to the following:
         df = pd.DataFrame(data)
 
         current_time = now.strftime("%Y-%m-%d_%H-%M-%S")
-        file_path = f"{folder_path}{current_time}_tweets_1-{len(self.data)}.csv"
+        fn = f"{current_time}_tweets_1-{len(self.data)}"
+
+        return df, fn
+
+    def save_to_csv(self):
+        print("Saving Tweets to CSV...")
+        df, file_name = self._save_helper()
+        file_path = os.path.join(self.save_folder_path, f"{file_name}.csv")
         pd.set_option("display.max_colwidth", None)
         df.to_csv(file_path, index=False, encoding="utf-8")
-
         print("CSV Saved: {}".format(file_path))
 
-        pass
+    def save_to_jsonl(self):
+        print("Saving Tweets to JSONL...")
+        df, file_name = self._save_helper()
+        file_path = os.path.join(self.save_folder_path, f"{file_name}.jsonl")
+        df.to_json(file_path, orient="records", lines=True)
+        print("JSONL Saved: {}".format(file_path))
 
     def get_tweets(self):
         return self.data

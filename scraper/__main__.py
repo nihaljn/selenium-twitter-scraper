@@ -129,6 +129,14 @@ def main():
             help="Scrape top tweets",
         )
 
+        parser.add_argument(
+            "--save_mode",
+            choices=["csv", "jsonl"],
+            help="Save mode: current choices are csv and jsonl",
+            default="csv",
+            type=str.lower
+        )
+
         args = parser.parse_args()
 
         USER_MAIL = args.mail
@@ -190,7 +198,12 @@ def main():
                 scrape_top=args.top,
                 scrape_poster_details="pd" in additional_data,
             )
-            scraper.save_to_csv()
+            if args.save_mode == "csv":
+                scraper.save_to_csv()
+            elif args.save_mode == "jsonl":
+                scraper.save_to_jsonl()
+            else:
+                raise ValueError("Invalid save mode:", args.save_mode)
             if not scraper.interrupted:
                 scraper.driver.close()
         else:

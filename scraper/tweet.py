@@ -1,10 +1,12 @@
 from time import sleep
-from selenium.common.exceptions import (
-    NoSuchElementException,
-    StaleElementReferenceException,
-)
+
+from selenium.common.exceptions import (NoSuchElementException,
+                                        StaleElementReferenceException)
 from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.action_chains import ActionChains
+
+from quote import Quote
+from utils import resolve_short_url
 
 
 class Tweet:
@@ -18,6 +20,7 @@ class Tweet:
         self.card = card
         self.error = False
         self.tweet = None
+        self.poster_details = {}
 
         try:
             self.user = card.find_element(
@@ -55,9 +58,9 @@ class Tweet:
                 "xpath", './/*[local-name()="svg" and @data-testid="icon-verified"]'
             )
 
-            self.verified = True
+            self.poster_details["verified"] = True
         except NoSuchElementException:
-            self.verified = False
+            self.poster_details["verified"] = False
 
         self.content = ""
         contents = card.find_elements(
@@ -142,11 +145,11 @@ class Tweet:
             self.emojis = []
 
         try:
-            self.profile_img = card.find_element(
+            self.poster_details["profile_img"] = card.find_element(
                 "xpath", './/div[@data-testid="Tweet-User-Avatar"]//img'
             ).get_attribute("src")
         except NoSuchElementException:
-            self.profile_img = ""
+            self.poster_details["profile_img"] = None
 
         try:
             self.tweet_link = self.card.find_element(
@@ -158,11 +161,132 @@ class Tweet:
             self.tweet_link = ""
             self.tweet_id = ""
 
-        self.following_cnt = "0"
-        self.followers_cnt = "0"
-        self.user_id = None
+        try:
+            images = self.card.find_elements(
+                "xpath", './/div[@data-testid="tweetPhoto"]//img'
+            )
+            image_urls = []
+            for img in images:
+                try:
+                    img_src = img.get_attribute('src')
+                    if img_src:
+                        image_urls.append(img_src)
+                except:
+                    continue
+            self.image_urls = image_urls
+            self.image_count = len(image_urls)
+        except NoSuchElementException:
+            self.image_urls = []
+            self.image_count = 0
+
+        # Extract video data
+        try:
+            video_players = self.card.find_elements(
+                "xpath", './/div[@data-testid="videoPlayer"]'
+            )
+            video_urls = []
+            video_thumbnails = []
+            video_durations = []
+            
+            for video_player in video_players:
+                try:
+                    # Get video blob URL
+                    video_sources = video_player.find_elements("xpath", './/video//source')
+                    for source in video_sources:
+                        video_url = source.get_attribute("src")
+                        if video_url and video_url.startswith("blob:"):
+                            video_urls.append(video_url)
+                    
+                    # Get video thumbnail/poster
+                    video_element = video_player.find_element("xpath", './/video')
+                    poster = video_element.get_attribute("poster")
+                    if poster:
+                        video_thumbnails.append(poster)
+                    
+                    # Get video duration
+                    try:
+                        duration_element = video_player.find_element(
+                            "xpath", './/span[contains(text(), ":")]'
+                        )
+                        duration = duration_element.text.strip()
+                        if ":" in duration and len(duration) <= 10:
+                            video_durations.append(duration)
+                    except NoSuchElementException:
+                        video_durations.append("unknown")
+                        
+                except NoSuchElementException:
+                    continue
+                    
+            self.video_urls = video_urls
+            self.video_count = len(video_urls)
+            self.video_thumbnails = video_thumbnails
+            self.video_durations = video_durations
+        except NoSuchElementException:
+            self.video_urls = []
+            self.video_count = 0
+            self.video_thumbnails = []
+            self.video_durations = []
+
+        # Extract media card URLs (t.co links)
+        try:
+            media_cards = self.card.find_elements(
+                "xpath", './/div[@data-testid="card.wrapper"]'
+            )
+            media_urls = []
+            resolved_urls = []
+            
+            for card in media_cards:
+                try:
+                    # Look for links in the media card
+                    links = card.find_elements("xpath", './/a[@href]')
+                    for link in links:
+                        href = link.get_attribute("href")
+                        if href and "t.co/" in href:
+                            media_urls.append(href)
+                            # Resolve the short URL
+                            resolved_url = resolve_short_url(href)
+                            resolved_urls.append(resolved_url)
+                except:
+                    continue
+                    
+            self.media_urls = media_urls
+            self.resolved_media_urls = resolved_urls
+            self.media_count = len(media_urls)
+        except NoSuchElementException:
+            self.media_urls = []
+            self.resolved_media_urls = []
+            self.media_count = 0
+
+        # Check for quoted tweet
+        try:
+            quote_sections = self.card.find_elements(
+                "xpath", './/div[contains(@aria-labelledby, "id__")]'
+            )
+            
+            self.quoted_tweet = None
+            for section in quote_sections:
+                try:
+                    # Check if this section contains "Quote" label
+                    section.find_element("xpath", './/span[text()="Quote"]')
+                    # Found a quote section, create Quote object
+                    quote = Quote(section)
+                    if not quote.error:
+                        self.quoted_tweet = quote
+                    break
+                except NoSuchElementException:
+                    continue
+                    
+            if self.quoted_tweet is None:
+                self.has_quote = False
+            else:
+                self.has_quote = True
+                
+        except NoSuchElementException:
+            self.quoted_tweet = None
+            self.has_quote = False
 
         if scrape_poster_details:
+
             el_name = card.find_element(
                 "xpath", './/div[@data-testid="User-Name"]//span'
             )
@@ -196,9 +320,9 @@ class Tweet:
                             ).get_attribute("data-testid")
 
                             if raw_user_id == "":
-                                self.user_id = None
+                                self.poster_details["user_id"] = None
                             else:
-                                self.user_id = str(raw_user_id.split("-")[0])
+                                self.poster_details["user_id"] = str(raw_user_id.split("-")[0])
 
                             ext_user_id = True
                         except NoSuchElementException:
@@ -209,12 +333,13 @@ class Tweet:
 
                     while not ext_following:
                         try:
-                            self.following_cnt = hover_card.find_element(
+                            following_cnt = hover_card.find_element(
                                 "xpath", './/a[contains(@href, "/following")]//span'
                             ).text
 
-                            if self.following_cnt == "":
-                                self.following_cnt = "0"
+                            if following_cnt == "":
+                                following_cnt = None
+                            self.poster_details["following_cnt"] = following_cnt
 
                             ext_following = True
                         except NoSuchElementException:
@@ -225,13 +350,14 @@ class Tweet:
 
                     while not ext_followers:
                         try:
-                            self.followers_cnt = hover_card.find_element(
+                            followers_cnt = hover_card.find_element(
                                 "xpath",
                                 './/a[contains(@href, "/verified_followers")]//span',
                             ).text
 
-                            if self.followers_cnt == "":
-                                self.followers_cnt = "0"
+                            if followers_cnt == "":
+                                followers_cnt = None
+                            self.poster_details["follower_cnt"] = followers_cnt
 
                             ext_followers = True
                         except NoSuchElementException:
@@ -253,25 +379,27 @@ class Tweet:
             if ext_hover_card and ext_following and ext_followers:
                 actions.reset_actions()
 
-        self.tweet = (
-            self.user,
-            self.handle,
-            self.date_time,
-            self.verified,
-            self.content,
-            self.reply_cnt,
-            self.retweet_cnt,
-            self.like_cnt,
-            self.analytics_cnt,
-            self.tags,
-            self.mentions,
-            self.emojis,
-            self.profile_img,
-            self.tweet_link,
-            self.tweet_id,
-            self.user_id,
-            self.following_cnt,
-            self.followers_cnt,
-        )
-
-        pass
+        self.tweet = {
+            "user": self.user,
+            "handle": self.handle,
+            "date_time": self.date_time,
+            "content": self.content,
+            "reply_cnt": self.reply_cnt,
+            "retweet_cnt": self.retweet_cnt,
+            "like_cnt": self.like_cnt,
+            "analytics_cnt": self.analytics_cnt,
+            "tags": self.tags,
+            "mentions": self.mentions,
+            "emojis": self.emojis,
+            "tweet_link": self.tweet_link,
+            "tweet_id": self.tweet_id,
+            "quoted_tweet": self.quoted_tweet.quote if self.quoted_tweet else None,
+            "image_urls": self.image_urls,
+            "video_urls": self.video_urls,
+            "video_thumbnails": self.video_thumbnails,
+            "video_durations": self.video_durations,
+            "media_urls": self.media_urls,
+            "resolved_media_urls": self.resolved_media_urls,
+            "media_count": self.media_count,
+            "poster_details": self.poster_details
+        }
