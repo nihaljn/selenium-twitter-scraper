@@ -1,122 +1,24 @@
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.remote.webelement import WebElement
-from utils import resolve_short_url
+
+from card import Card
 
 
-class Quote:
-    def __init__(self, quote_element: WebElement) -> None:
-        self.quote_element = quote_element
+class Quote(Card):
+    def __init__(self, quote_card: WebElement) -> None:
+        super().__init__(quote_card)
         self.error = False
         self.quote = None
         self.poster_details = {}
+        self._scrape()
+        # Build final tweet dictionary
+        self._build_tweet_dict()
 
-        # Check if this is actually a quote by looking for "Quote" label
-        try:
-            quote_element.find_element("xpath", './/span[text()="Quote"]')
-        except NoSuchElementException:
-            self.error = True
-            return
-
-        # Extract user information
-        try:
-            self.user = quote_element.find_element(
-                "xpath", './/div[@data-testid="User-Name"]//span[not(contains(text(), "@"))]'
-            ).text
-        except NoSuchElementException:
-            self.error = True
-            self.user = "skip"
-
-        try:
-            self.handle = quote_element.find_element(
-                "xpath", './/div[@data-testid="User-Name"]//span[contains(text(), "@")]'
-            ).text
-        except NoSuchElementException:
-            self.error = True
-            self.handle = "skip"
-
-        try:
-            self.date_time = quote_element.find_element("xpath", ".//time").get_attribute(
-                "datetime"
-            )
-        except NoSuchElementException:
-            self.error = True
-            self.date_time = "skip"
-
-        if self.error:
-            return
-
-        # Check if user is verified
-        try:
-            quote_element.find_element(
-                "xpath", './/*[local-name()="svg" and @data-testid="icon-verified"]'
-            )
-            self.poster_details["verified"] = True
-        except NoSuchElementException:
-            self.poster_details["verified"] = False
-
-        # Extract content
-        self.content = ""
-        try:
-            contents = quote_element.find_elements(
-                "xpath",
-                './/div[@data-testid="tweetText"]/span | .//div[@data-testid="tweetText"]/a',
-            )
-            for content in contents:
-                self.content += content.text
-        except NoSuchElementException:
-            self.content = ""
-
-        # Extract hashtags
-        try:
-            self.tags = quote_element.find_elements(
-                "xpath",
-                './/a[contains(@href, "src=hashtag_click")]',
-            )
-            self.tags = [tag.text for tag in self.tags]
-        except NoSuchElementException:
-            self.tags = []
-
-        # Extract mentions
-        try:
-            self.mentions = quote_element.find_elements(
-                "xpath",
-                './/div[@data-testid="tweetText"]//a[contains(text(), "@")]',
-            )
-            self.mentions = [mention.text for mention in self.mentions]
-        except NoSuchElementException:
-            self.mentions = []
-
-        # Extract emojis
-        try:
-            raw_emojis = quote_element.find_elements(
-                "xpath",
-                './/div[@data-testid="tweetText"]/img[contains(@src, "emoji")]',
-            )
-            self.emojis = [
-                emoji.get_attribute("alt").encode("unicode-escape").decode("ASCII")
-                for emoji in raw_emojis
-            ]
-        except NoSuchElementException:
-            self.emojis = []
-
-        # Extract profile image
-        try:
-            # Look for user avatar in the quote
-            avatar_containers = quote_element.find_elements(
-                "xpath", './/div[contains(@data-testid, "UserAvatar-Container-")]'
-            )
-            if avatar_containers:
-                self.poster_details["profile_img"] = avatar_containers[0].find_element(
-                    "xpath", ".//img"
-                ).get_attribute("src")
-            else:
-                self.poster_details["profile_img"] = None
-        except NoSuchElementException:
-            self.poster_details["profile_img"] = None
+    def _scrape_images(self):
 
         # Extract images from quoted tweet
         try:
-            images = quote_element.find_elements(
+            images = self.card.find_elements(
                 "xpath", './/div[@data-testid="tweetPhoto"]//img'
             )
             image_urls = []
@@ -136,9 +38,11 @@ class Quote:
             self.image_urls = []
             self.image_count = 0
 
+    def _scrape_videos(self):
+
         # Extract video data from quoted tweet
         try:
-            video_players = quote_element.find_elements(
+            video_players = self.card.find_elements(
                 "xpath", './/div[@data-testid="videoPlayer"]'
             )
             video_urls = []
@@ -184,52 +88,10 @@ class Quote:
             self.video_thumbnails = []
             self.video_durations = []
 
-        # Extract media card URLs (t.co links)
-        try:
-            media_cards = quote_element.find_elements(
-                "xpath", './/div[@data-testid="card.wrapper"]'
-            )
-            media_urls = []
-            resolved_urls = []
-            
-            for card in media_cards:
-                try:
-                    # Look for links in the media card
-                    links = card.find_elements("xpath", './/a[@href]')
-                    for link in links:
-                        href = link.get_attribute("href")
-                        if href and "t.co/" in href:
-                            media_urls.append(href)
-                            # Resolve the short URL
-                            resolved_url = resolve_short_url(href)
-                            resolved_urls.append(resolved_url)
-                except:
-                    continue
-                    
-            self.media_urls = media_urls
-            self.resolved_media_urls = resolved_urls
-            self.media_count = len(media_urls)
-        except NoSuchElementException:
-            self.media_urls = []
-            self.resolved_media_urls = []
-            self.media_count = 0
-
-        # Try to extract quoted tweet ID from any links
-        try:
-            status_links = quote_element.find_elements(
-                "xpath", ".//a[contains(@href, '/status/')]"
-            )
-            if status_links:
-                self.tweet_link = status_links[0].get_attribute("href")
-                self.tweet_id = str(self.tweet_link.split("/")[-1])
-            else:
-                self.tweet_link = ""
-                self.tweet_id = ""
-        except NoSuchElementException:
-            self.tweet_link = ""
-            self.tweet_id = ""
+    def _build_tweet_dict(self):
 
         # Create the quote tuple (similar to Tweet pattern)
+        # import ipdb; ipdb.set_trace()
         self.quote = {
             "user": self.user,
             "handle": self.handle,
@@ -244,8 +106,12 @@ class Quote:
             "video_urls": self.video_urls,
             "video_thumbnails": self.video_thumbnails,
             "video_durations": self.video_durations,
-            "media_urls": self.media_urls,
-            "resolved_media_urls": self.resolved_media_urls,
-            "media_count": self.media_count,
             "poster_details": self.poster_details
         }
+
+    def _scrape(self):
+        super()._scrape()
+        
+        # Media content
+        self._scrape_images()
+        self._scrape_videos()
