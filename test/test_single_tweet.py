@@ -83,6 +83,10 @@ class TestSingleTweet:
             actual = tweet.get(k)
             if expected != actual:
                 differences.append(Difference(k, expected, actual))
+
+        for k in tweet:
+            if k not in main_tweet:
+                differences.append(Difference(k, None, tweet[k]))
         
         assert len(differences) == 0, (
             f"Found {len(differences)} differing keys:\n" +

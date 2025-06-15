@@ -1,0 +1,57 @@
+{
+    "user": "jhey ʕ•ᴥ•ʔ",
+    "handle": "@jh3yy",
+    "date_time": "2025-06-10T05:19:56.000Z",
+    "content": "of course, we'll have a look 🌊",
+    "reply_cnt": "92",
+    "retweet_cnt": "207",
+    "like_cnt": "4.4K",
+    "analytics_cnt": "0",
+    "tags": [],
+    "mentions": [],
+    "emojis": [
+        "\\U0001f30a"
+    ],
+    "tweet_link": "file:///jh3yy/status/1932954702255141031",
+    "tweet_id": "1932954702255141031",
+    "quoted_tweet": {
+        "user": "Charles Patterson",
+        "handle": "@CharlesPattson",
+        "date_time": "2025-06-10T05:19:56.000Z",
+        "content": "A 100x dev did this",
+        "tags": [],
+        "mentions": [],
+        "emojis": [],
+        "tweet_link": "",
+        "tweet_id": "",
+        "image_urls": [],
+        "videos": [
+            {
+                "video_id": "7ed834ed-a556-426c-99f4-2cea65bc947c",
+                "source": "blob:https://x.com/7ed834ed-a556-426c-99f4-2cea65bc947c",
+                "duration": "unknown",
+                "thumbnail": "https://pbs.twimg.com/amplify_video_thumb/1932196575855480832/img/kRmkZIOpyUN_EXSP.jpg"
+            }
+        ],
+        "poster_details": {
+            "verified": true,
+            "profile_img": "https://pbs.twimg.com/profile_images/1551594698409648129/gHZ8lE9n_mini.jpg"
+        }
+    },
+    "image_urls": [],
+    "videos": [
+        {
+            "video_id": "9abe67f2-f741-48c7-928d-fb330ee16e4e",
+            "source": "blob:https://x.com/9abe67f2-f741-48c7-928d-fb330ee16e4e",
+            "duration": "0:57",
+            "thumbnail": "https://pbs.twimg.com/amplify_video_thumb/1932953615766814720/img/v5i_m0VpIMq3tv0X.jpg"
+        }
+    ],
+    "media_urls": [],
+    "resolved_media_urls": [],
+    "media_count": 0,
+    "poster_details": {
+        "verified": true,
+        "profile_img": "https://pbs.twimg.com/profile_images/1534700564810018816/anAuSfkp_normal.jpg"
+    }
+}

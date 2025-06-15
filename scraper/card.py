@@ -174,7 +174,90 @@ class Card:
           self.tweet_link = ""
           self.tweet_id = ""
 
-    def _scrape(self):
+    def _extract_video_info(self, video_player: WebElement) -> dict:
+        video = {
+            "video_id": "unknown",
+            "source": "unknown",
+            "duration": "unknown",
+            "thumbnail": "unknown",
+        }
+        try:
+            # Get video blob URL
+            video_source = video_player.find_element("xpath", './/video//source')
+            video_url = video_source.get_attribute("src")
+            video_id = video_url.split("/")[-1]
+            
+            # Get video thumbnail/poster
+            video_element = video_player.find_element("xpath", './/video')
+            thumbnail = video_element.get_attribute("poster")
+            
+            # Get video duration
+            try:
+                duration_element = video_player.find_element(
+                    "xpath", './/span[contains(text(), ":")]'
+                )
+                duration = duration_element.text.strip()
+            except:
+                duration = "unknown"
+
+            # Store
+            video["video_id"] = video_id
+            video["source"] = video_url
+            video["duration"] = duration
+            video["thumbnail"] = thumbnail
+        except NoSuchElementException as e:
+            print("Warning (skipping) - ", e)
+            pass
+        return video
+
+
+    def _scrape_videos(self):
+        # Extract video data from quoted tweet
+        try:
+            video_players = self.card.find_elements(
+                "xpath", './/div[@data-testid="videoPlayer"]'
+            )
+            videos = []
+            for video_player in video_players:
+                try:
+                    video = self._extract_video_info(video_player)
+                    videos.append(video)
+                except NoSuchElementException:
+                    continue
+            self.videos = videos
+        except NoSuchElementException:
+            self.videos = []
+
+
+    def _scrape_images(self):
+
+        # Extract images from quoted tweet
+        try:
+            images = self.card.find_elements(
+                "xpath", './/div[@data-testid="tweetPhoto"]//img'
+            )
+            image_urls = []
+            video_thumbnails = set(
+                v["thumbnail"] for v in self.videos 
+                if v.get("thumbnail") not in [None, "unknown"]
+            )
+            for img in images:
+                try:
+                    img_src = img.get_attribute('src')
+                    if img_src:
+                        if 'name=small' in img_src:
+                            # Convert to higher quality
+                            img_src = img_src.replace('name=small', 'name=large')
+                        if img_src not in video_thumbnails:
+                            image_urls.append(img_src)
+                except:
+                    continue
+            self.image_urls = image_urls
+        except NoSuchElementException:
+            self.image_urls = []
+
+
+    def _scrape(self, scrape_media: bool = True):
         # Basic tweet information
         self._scrape_user()
         self._scrape_handle()
@@ -190,3 +273,8 @@ class Card:
         self._scrape_tags_mentions_emojis()
         self._scrape_profile_image()
         self._scrape_tweet_link()
+
+        # Media content
+        if scrape_media:
+            self._scrape_videos()
+            self._scrape_images()

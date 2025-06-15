@@ -32,20 +32,16 @@
             "https://pbs.twimg.com/media/Gf-SIcyWEAAeNP-?format=jpg&name=360x360",
             "https://pbs.twimg.com/media/Gf-SJe5WMAAIRLB?format=jpg&name=360x360"
         ],
-        "video_urls": [],
-        "video_thumbnails": [],
-        "video_durations": [],
+        "videos": [],
         "poster_details": {
             "verified": true,
             "profile_img": "https://pbs.twimg.com/profile_images/1589756412078555136/YlXMBzhp_mini.jpg"
         }
     },
     "image_urls": [
-        "https://pbs.twimg.com/media/GtPKE6bWcAAzPuc?format=jpg&name=small"
+        "https://pbs.twimg.com/media/GtPKE6bWcAAzPuc?format=jpg&name=large"
     ],
-    "video_urls": [],
-    "video_thumbnails": [],
-    "video_durations": [],
+    "videos": [],
     "media_urls": [],
     "resolved_media_urls": [],
     "media_count": 0,

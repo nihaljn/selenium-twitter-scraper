@@ -15,12 +15,12 @@ sys.path.insert(0, str(path_to_scraper_package))
 from tweet import Tweet
 
 
-class TestImagesInMainAndQuoteTweet:
+class TestSingleTweet:
 
     @pytest.fixture
     def main_tweet(self):
         """Fixture to create a Tweet object for the main tweet"""
-        path = Path(__file__).parent / "data/processed/images_main_and_quote.json"
+        path = Path(__file__).parent / "data/processed/videos_main_and_quote.json"
         with open(path, "r") as f:
             data = json.load(f)
         return data
@@ -35,7 +35,7 @@ class TestImagesInMainAndQuoteTweet:
 
         driver = webdriver.Chrome(options=options)
         try:
-            html_path = Path(__file__).parent / "data/processed/images_main_and_quote.html"
+            html_path = Path(__file__).parent / "data/processed/videos_main_and_quote.html"
             # Convert to absolute file URL
             file_url = f"file://{html_path.absolute()}"
             driver.get(file_url)
@@ -60,8 +60,8 @@ class TestImagesInMainAndQuoteTweet:
     def test_tweets_count(self, main_tweet, driver):
         """Test for the correct number of tweets in the page"""
         tweet_cards = self._get_tweet_cards(driver)
-        assert len(tweet_cards) == 2, (
-            f"Expected 2 tweets, but found {len(tweet_cards)}."
+        assert len(tweet_cards) == 1, (
+            f"Expected 1 tweet, but found {len(tweet_cards)}."
         )
 
     
@@ -83,44 +83,9 @@ class TestImagesInMainAndQuoteTweet:
             actual = tweet.get(k)
             if expected != actual:
                 differences.append(Difference(k, expected, actual))
-
         for k in tweet:
             if k not in main_tweet:
                 differences.append(Difference(k, None, tweet[k]))
-        
-        assert len(differences) == 0, (
-            f"Found {len(differences)} differing keys:\n" +
-            "\n".join(str(d) for d in differences)
-        )
-
-
-    def test_quote_tweet_props(self, main_tweet, driver):
-        """Test if the first tweet (main tweet with a quote) has the right 
-        properties including those for the quoted tweet"""
-        tweet_card = self._get_tweet_cards(driver)[0] # get the first tweet
-        assert tweet_card is not None, "Could not find the first tweet card"
-        tweet = Tweet(tweet_card).tweet
-        assert tweet is not None, "Could not create Tweet object"
-        differences = []
-        
-        # quoted tweet
-        if "quoted_tweet" not in tweet:
-            differences.append(Difference(
-                "quoted_tweet", main_tweet['quoted_tweet'], None
-            ))
-        else:
-            for k in main_tweet["quoted_tweet"]:
-                expected = main_tweet["quoted_tweet"][k]
-                actual = tweet["quoted_tweet"].get(k)
-                if expected != actual:
-                    differences.append(Difference(
-                        k, expected, actual
-                    ))
-            for k in tweet["quoted_tweet"]:
-                if k not in main_tweet["quoted_tweet"]:
-                    differences.append(Difference(
-                        k, None, tweet["quoted_tweet"][k]
-                    ))
         
         assert len(differences) == 0, (
             f"Found {len(differences)} differing keys:\n" +

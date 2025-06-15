@@ -60,69 +60,67 @@ class Tweet(Card):
                 "xpath", './/div[@data-testid="tweetPhoto"]//img'
             )
             image_urls = []
+            
+            quote_image_urls = set(
+                self.quoted_tweet.image_urls
+            ) if self.quoted_tweet else set()
+            quote_video_thumbnails = set(
+                v["thumbnail"] for v in self.quoted_tweet.videos
+                if v.get("thumbnail") not in [None, "unknown"]
+            ) if self.quoted_tweet else set()
+            video_thumbnails = set(
+                v["thumbnail"] for v in self.videos 
+                if v.get("thumbnail") not in [None, "unknown"]
+            )
+            
             for img in images:
                 try:
                     img_src = img.get_attribute('src')
                     if img_src:
-                        # exclude those in quote
-                        if self.has_quote and img_src in self.quoted_tweet.image_urls:
-                            continue
-                        image_urls.append(img_src)
+                        if 'name=small' in img_src:
+                            # Convert to higher quality
+                            img_src = img_src.replace('name=small', 'name=large')
+                        if (
+                            img_src not in video_thumbnails and
+                            img_src not in quote_image_urls and
+                            img_src not in quote_video_thumbnails
+                        ):
+                            image_urls.append(img_src)
                 except:
                     continue
             self.image_urls = image_urls
-            self.image_count = len(image_urls)
         except NoSuchElementException:
             self.image_urls = []
-            self.image_count = 0
+
 
     def _scrape_videos(self):
+        # Extract video data from quoted tweet
         try:
             video_players = self.card.find_elements(
                 "xpath", './/div[@data-testid="videoPlayer"]'
             )
-            video_urls = []
-            video_thumbnails = []
-            video_durations = []
             
+            videos = []
+            quote_video_ids = set(
+                v["video_id"] for v in self.quoted_tweet.videos
+            ) if self.quoted_tweet else set()
+
             for video_player in video_players:
                 try:
                     # Get video blob URL
-                    video_sources = video_player.find_elements("xpath", './/video//source')
-                    for source in video_sources:
-                        video_url = source.get_attribute("src")
-                        if video_url and video_url.startswith("blob:"):
-                            video_urls.append(video_url)
-                    
-                    # Get video thumbnail/poster
-                    video_element = video_player.find_element("xpath", './/video')
-                    poster = video_element.get_attribute("poster")
-                    if poster:
-                        video_thumbnails.append(poster)
-                    
-                    # Get video duration
-                    try:
-                        duration_element = video_player.find_element(
-                            "xpath", './/span[contains(text(), ":")]'
-                        )
-                        duration = duration_element.text.strip()
-                        if ":" in duration and len(duration) <= 10:
-                            video_durations.append(duration)
-                    except NoSuchElementException:
-                        video_durations.append("unknown")
-                        
+                    video_source = video_player.find_element("xpath", './/video//source')
+                    video_url = video_source.get_attribute("src")
+                    video_id = video_url.split("/")[-1]
+                    if video_id in quote_video_ids:
+                        # video is from quoted tweet
+                        continue
+                    video = self._extract_video_info(video_player)
+                    videos.append(video)
                 except NoSuchElementException:
                     continue
-                    
-            self.video_urls = video_urls
-            self.video_count = len(video_urls)
-            self.video_thumbnails = video_thumbnails
-            self.video_durations = video_durations
+            self.videos = videos
         except NoSuchElementException:
-            self.video_urls = []
-            self.video_count = 0
-            self.video_thumbnails = []
-            self.video_durations = []
+            self.videos = []
 
     def _scrape_media_cards(self):
         try:
@@ -265,11 +263,7 @@ class Tweet(Card):
             "tweet_id": self.tweet_id,
             "quoted_tweet": self.quoted_tweet.quote if self.quoted_tweet else None,
             "image_urls": self.image_urls,
-            "image_count": self.image_count,
-            "video_urls": self.video_urls,
-            "video_count": self.video_count,
-            "video_thumbnails": self.video_thumbnails,
-            "video_durations": self.video_durations,
+            "videos": self.videos,
             "media_urls": self.media_urls,
             "resolved_media_urls": self.resolved_media_urls,
             "media_count": self.media_count,
@@ -277,12 +271,12 @@ class Tweet(Card):
         }
 
     def _scrape(self):
-        super()._scrape()
+        super()._scrape(scrape_media=False)
         self._scrape_quoted_tweet()
         
         # Media content
-        self._scrape_images()
         self._scrape_videos()
+        self._scrape_images()
         self._scrape_media_cards()
         
         # Detailed poster information (if requested)
