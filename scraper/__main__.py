@@ -25,6 +25,14 @@ def main():
 
         try:
             parser.add_argument(
+                "mode",
+                type=str,
+                default="timeline",
+                help="Scrape mode. [timeline/conversation/tweet]",
+                choices=["timeline", "conversation", "tweet"],
+            )
+
+            parser.add_argument(
                 "--mail",
                 type=str,
                 default=os.getenv("TWITTER_MAIL"),
@@ -137,6 +145,13 @@ def main():
             type=str.lower
         )
 
+        parser.add_argument(
+            "--url",
+            type=str,
+            default=None,
+            help="URL to specific tweet or conversation to scrape",
+        )
+
         args = parser.parse_args()
 
         USER_MAIL = args.mail
@@ -178,6 +193,10 @@ def main():
             print("Please specify either --latest or --top. Not both.")
             sys.exit(1)
 
+        if args.mode == "conversation" and args.url is None:
+            print("Please specify a conversation URL to scrape.")
+            sys.exit(1)
+
         if USER_UNAME is not None and USER_PASSWORD is not None:
             scraper = Twitter_Scraper(
                 mail=USER_MAIL,
@@ -186,22 +205,30 @@ def main():
                 headlessState=HEADLESS_MODE
             )
             scraper.login()
-            scraper.scrape_tweets(
-                max_tweets=args.tweets,
-                no_tweets_limit= args.no_tweets_limit if args.no_tweets_limit is not None else True,
-                scrape_username=args.username,
-                scrape_hashtag=args.hashtag,
-                scrape_bookmarks=args.bookmarks,
-                scrape_query=args.query,
-                scrape_list=args.list,
-                scrape_latest=args.latest,
-                scrape_top=args.top,
-                scrape_poster_details="pd" in additional_data,
-            )
+            if args.mode == "timeline":
+                data = scraper.scrape_timeline_tweets(
+                    max_tweets=args.tweets,
+                    no_tweets_limit= args.no_tweets_limit if args.no_tweets_limit is not None else True,
+                    scrape_username=args.username,
+                    scrape_hashtag=args.hashtag,
+                    scrape_bookmarks=args.bookmarks,
+                    scrape_query=args.query,
+                    scrape_list=args.list,
+                    scrape_latest=args.latest,
+                    scrape_top=args.top,
+                    scrape_poster_details="pd" in additional_data,
+                )
+            elif args.mode == "conversation":
+                data = scraper.scrape_tweet_conversation(
+                    conversation_url=args.url,
+                    max_tweets=args.tweets
+                )
+            else:
+                raise ValueError("Invalid mode:", args.mode)
             if args.save_mode == "csv":
-                scraper.save_to_csv()
+                scraper.save_to_csv(data)
             elif args.save_mode == "jsonl":
-                scraper.save_to_jsonl()
+                scraper.save_to_jsonl(data)
             else:
                 raise ValueError("Invalid save mode:", args.save_mode)
             if not scraper.interrupted:

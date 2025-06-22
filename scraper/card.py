@@ -7,6 +7,27 @@ from selenium.webdriver.remote.webelement import WebElement
 class Card:
     def __init__(self, card: WebElement):
         self.card = card
+        # initialize all variables to None
+        self.error = False
+        self.user = None
+        self.handle = None
+        self.date_time = None
+        self.content = None
+        self.tags = None
+        self.mentions = None
+        self.emojis = None
+        self.tweet_link = None
+        self.tweet_id = None
+        self.reply_cnt = None
+        self.retweet_cnt = None
+        self.like_cnt = None
+        self.analytics_cnt = None
+        self.image_urls = None
+        self.videos = None
+        self.media_urls = None
+        self.resolved_media_urls = None
+        self.media_count = None
+        self.poster_details = None
 
     def _scrape_user(self):
         try:

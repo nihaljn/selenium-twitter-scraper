@@ -56,8 +56,6 @@ class Twitter_Scraper:
         self.headlessState = headlessState
         self.interrupted = False
         self.tweet_ids = set()
-        self.data = []
-        self.tweet_cards = []
         self.save_folder_path = save_folder_path
         self.scraper_details = {
             "type": None,
@@ -98,8 +96,6 @@ class Twitter_Scraper:
         scrape_poster_details=False,
     ):
         self.tweet_ids = set()
-        self.data = []
-        self.tweet_cards = []
         self.max_tweets = max_tweets
         self.progress = Progress(0, max_tweets)
         self.scraper_details = {
@@ -401,10 +397,10 @@ It may be due to the following:
         pass
 
     def get_tweet_cards(self):
-        self.tweet_cards = self.driver.find_elements(
+        tweet_cards = self.driver.find_elements(
             "xpath", '//article[@data-testid="tweet" and not(@disabled)]'
         )
-        pass
+        return tweet_cards
 
     def remove_hidden_cards(self):
         try:
@@ -420,7 +416,27 @@ It may be due to the following:
             return
         pass
 
-    def scrape_tweets(
+    def _click_all_show_more_buttons(self):
+        # Look for "Show more" buttons and click them
+        show_more_buttons = self.driver.find_elements(
+            "xpath", '//button[@data-testid="tweet-text-show-more-link"]'
+        )
+        for button in show_more_buttons:
+            try:
+                # Scroll button into view to ensure it's clickable
+                self.driver.execute_script(
+                    "arguments[0].scrollIntoView({block: 'center'});", 
+                    button
+                )
+                sleep(0.5)
+                # Click the button to expand content
+                button.click()
+                sleep(1)  # Wait for content to expand
+            except Exception as e:
+                # Handle any clicking errors gracefully
+                continue 
+        
+    def scrape_timeline_tweets(
         self,
         max_tweets=50,
         no_tweets_limit=False,
@@ -487,13 +503,15 @@ It may be due to the following:
         added_tweets = 0
         empty_count = 0
         retry_cnt = 0
+        data = []
 
         while self.scroller.scrolling:
             try:
-                self.get_tweet_cards()
+                self._click_all_show_more_buttons()
+                tweet_cards = self.get_tweet_cards()
                 added_tweets = 0
 
-                for card in self.tweet_cards[-15:]:
+                for card in tweet_cards[-15:]:
                     try:
                         tweet_id = str(card)
 
@@ -505,7 +523,7 @@ It may be due to the following:
                                     "arguments[0].scrollIntoView();", card
                                 )
 
-                            import ipdb; ipdb.set_trace()
+                            # import ipdb; ipdb.set_trace()
                             tweet = Tweet(
                                 card=card,
                                 driver=self.driver,
@@ -518,11 +536,11 @@ It may be due to the following:
                             if tweet:
                                 if not tweet.error and tweet.tweet is not None:
                                     if not tweet.is_ad:
-                                        self.data.append(tweet.tweet)
+                                        data.append(tweet.tweet)
                                         added_tweets += 1
-                                        self.progress.print_progress(len(self.data), False, 0, no_tweets_limit)
+                                        self.progress.print_progress(len(data), False, 0, no_tweets_limit)
 
-                                        if len(self.data) >= self.max_tweets and not no_tweets_limit:
+                                        if len(data) >= self.max_tweets and not no_tweets_limit:
                                             self.scroller.scrolling = False
                                             break
                                     else:
@@ -531,12 +549,11 @@ It may be due to the following:
                                     continue
                             else:
                                 continue
-                        else:
-                            continue
+                        
                     except NoSuchElementException:
                         continue
 
-                if len(self.data) >= self.max_tweets and not no_tweets_limit:
+                if len(data) >= self.max_tweets and not no_tweets_limit:
                     break
 
                 if added_tweets == 0:
@@ -545,7 +562,7 @@ It may be due to the following:
                         while retry_cnt < 15:
                             retry_button = self.driver.find_element(
                             "xpath", "//span[text()='Retry']/../../..")
-                            self.progress.print_progress(len(self.data), True, retry_cnt, no_tweets_limit)
+                            self.progress.print_progress(len(data), True, retry_cnt, no_tweets_limit)
                             sleep(600)
                             retry_button.click()
                             retry_cnt += 1
@@ -553,7 +570,7 @@ It may be due to the following:
                     # There is no Retry button so the counter is reseted
                     except NoSuchElementException:
                         retry_cnt = 0
-                        self.progress.print_progress(len(self.data), False, 0, no_tweets_limit)
+                        self.progress.print_progress(len(data), False, 0, no_tweets_limit)
 
                     if empty_count >= 5:
                         if refresh_count >= 3:
@@ -581,19 +598,19 @@ It may be due to the following:
 
         print("")
 
-        if len(self.data) >= self.max_tweets or no_tweets_limit:
+        if len(data) >= self.max_tweets or no_tweets_limit:
             print("Scraping Complete")
         else:
             print("Scraping Incomplete")
 
         if not no_tweets_limit:
-            print("Tweets: {} out of {}\n".format(len(self.data), self.max_tweets))
+            print("Tweets: {} out of {}\n".format(len(data), self.max_tweets))
 
-        pass
+        return data
 
     def scrape_tweet_conversation(
         self,
-        tweet_url: str,
+        conversation_url: str,
         max_tweets: int = 50,
     ):
         """
@@ -606,7 +623,7 @@ It may be due to the following:
         """
         try:
             # get the tweet
-            self.driver.get(tweet_url)
+            self.driver.get(conversation_url)
             # wait for the tweet to load
             sleep(3)
 
@@ -619,23 +636,8 @@ It may be due to the following:
             
             # Main scrolling loop to collect tweets
             while not discover_more_boundary and len(conversation) < max_tweets and consecutive_empty_scrolls < max_empty_scrolls:
-                # Look for "Show more" buttons and click them
-                show_more_buttons = self.driver.find_elements(
-                    "xpath", '//button[@data-testid="tweet-text-show-more-link"]'
-                )
                 
-                for button in show_more_buttons:
-                    try:
-                        # Scroll button into view to ensure it's clickable
-                        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
-                        sleep(0.5)
-                        
-                        # Click the button to expand content
-                        button.click()
-                        sleep(1)  # Wait for content to expand
-                    except Exception as e:
-                        # Handle any clicking errors gracefully
-                        continue 
+                self._click_all_show_more_buttons()
                 
                 # Find the "Discover more" section position for boundary check
                 try:
@@ -705,7 +707,7 @@ It may be due to the following:
                 
                 # Scroll down to load more tweets (unless we've hit limits)
                 if not discover_more_boundary and len(conversation) < max_tweets and consecutive_empty_scrolls < max_empty_scrolls:
-                    self.driver.execute_script("window.scrollBy(0, 1000);")
+                    self.driver.execute_script("window.scrollBy(0, 500);")
                     sleep(2)
             
             return conversation
@@ -719,34 +721,31 @@ It may be due to the following:
             print(f"Error scraping tweets: {e}")
 
     
-    def _save_helper(self):
+    def _save_helper(self, data):
         now = datetime.now()
 
         if not os.path.exists(self.save_folder_path):
             os.makedirs(self.save_folder_path)
             print("Created Folder: {}".format(self.save_folder_path))
 
-        df = pd.DataFrame(self.data)
+        df = pd.DataFrame(data)
 
         current_time = now.strftime("%Y-%m-%d_%H-%M-%S")
-        fn = f"{current_time}_tweets_1-{len(self.data)}"
+        fn = f"{current_time}_tweets_1-{len(data)}"
 
         return df, fn
 
-    def save_to_csv(self):
+    def save_to_csv(self, data):
         print("Saving Tweets to CSV...")
-        df, file_name = self._save_helper()
+        df, file_name = self._save_helper(data)
         file_path = os.path.join(self.save_folder_path, f"{file_name}.csv")
         pd.set_option("display.max_colwidth", None)
         df.to_csv(file_path, index=False, encoding="utf-8")
         print("CSV Saved: {}".format(file_path))
 
-    def save_to_jsonl(self):
+    def save_to_jsonl(self, data):
         print("Saving Tweets to JSONL...")
-        df, file_name = self._save_helper()
+        df, file_name = self._save_helper(data)
         file_path = os.path.join(self.save_folder_path, f"{file_name}.jsonl")
         df.to_json(file_path, orient="records", lines=True)
         print("JSONL Saved: {}".format(file_path))
-
-    def get_tweets(self):
-        return self.data
