@@ -6,7 +6,6 @@ from scroller import Scroller
 from tweet import Tweet
 
 from datetime import datetime
-from fake_headers import Headers
 from time import sleep
 
 from selenium import webdriver
@@ -28,114 +27,56 @@ from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 from webdriver_manager.firefox import GeckoDriverManager
 
+from functools import partial
+
 TWITTER_LOGIN_URL = "https://twitter.com/i/flow/login"
 
 
 class Twitter_Scraper:
     def __init__(
         self,
-        mail,
         username,
         password,
         headlessState,
-        max_tweets=50,
         save_folder_path="./tweets/",
-        scrape_username=None,
-        scrape_hashtag=None,
-        scrape_query=None,
-        scrape_bookmarks=False,
-        scrape_poster_details=False,
-        scrape_latest=True,
-        scrape_top=False,
         proxy=None,
+        browser: str = "firefox"
     ):
         print("Initializing Twitter Scraper...")
-        self.mail = mail
         self.username = username
         self.password = password
         self.headlessState = headlessState
         self.interrupted = False
-        self.tweet_ids = set()
         self.save_folder_path = save_folder_path
-        self.scraper_details = {
-            "type": None,
-            "username": None,
-            "hashtag": None,
-            "bookmarks": False,
-            "query": None,
-            "tab": None,
-            "poster_details": False,
-        }
-        self.max_tweets = max_tweets
-        self.progress = Progress(0, max_tweets)
-        self.router = self.go_to_home
-        self.driver = self._get_driver(proxy)
+        self.driver = self._get_driver(proxy, browser)
         self.actions = ActionChains(self.driver)
-        self.scroller = Scroller(self.driver)
-        self._config_scraper(
-            max_tweets,
-            scrape_username,
-            scrape_hashtag,
-            scrape_bookmarks,
-            scrape_query,
-            scrape_latest,
-            scrape_top,
-            scrape_poster_details,
-        )
 
-    def _config_scraper(
-        self,
-        max_tweets=50,
-        scrape_username=None,
-        scrape_hashtag=None,
-        scrape_bookmarks=False,
-        scrape_query=None,
-        scrape_list=None,
-        scrape_latest=True,
-        scrape_top=False,
-        scrape_poster_details=False,
-    ):
-        self.tweet_ids = set()
-        self.max_tweets = max_tweets
-        self.progress = Progress(0, max_tweets)
-        self.scraper_details = {
-            "type": None,
-            "username": scrape_username,
-            "hashtag": str(scrape_hashtag).replace("#", "")
-            if scrape_hashtag is not None
-            else None,
-            "bookmarks": scrape_bookmarks,
-            "query": scrape_query,
-            "list": scrape_list,
-            "tab": "Latest" if scrape_latest else "Top" if scrape_top else "Latest",
-            "poster_details": scrape_poster_details,
-        }
-        self.router = self.go_to_home
-        self.scroller = Scroller(self.driver)
-
-        if scrape_username is not None:
-            self.scraper_details["type"] = "Username"
-            self.router = self.go_to_profile
-        elif scrape_hashtag is not None:
-            self.scraper_details["type"] = "Hashtag"
-            self.router = self.go_to_hashtag
-        elif scrape_bookmarks is not False:
-            self.scraper_details["type"] = "Bookmarks"
-            self.router = self.go_to_bookmarks
-        elif scrape_query is not None:
-            self.scraper_details["type"] = "Query"
-            self.router = self.go_to_search
-        elif scrape_list is not None:
-            self.scraper_details["type"] = "List"
-            self.router = self.go_to_list
+    def _route(self, mode, url: str | None):
+        # configure current scraping session
+        if mode == "username":
+            router = self.go_to_profile
+        elif mode == "hashtag":
+            router = self.go_to_hashtag
+        elif mode == "bookmarks":
+            router = self.go_to_bookmarks
+        elif mode == "query":
+            router = self.go_to_search
+        elif mode == "list":
+            router = self.go_to_list
+        elif mode == "timeline":
+            router = self.go_to_timeline
+        elif mode == "conversation":
+            assert url is not None, "URL is required for conversation mode"
+            router = partial(self.go_to_url, url=url)
         else:
-            self.scraper_details["type"] = "Home"
-            self.router = self.go_to_home
-        pass
+            print(ValueError("Invalid mode"))
+            sys.exit(1)
+        router()
 
     def _get_driver(
         self,
         proxy=None,
+        browser: str = "firefox"
     ):
         print("Setup WebDriver...")
         # header = Headers().generate()["User-Agent"] 
@@ -143,8 +84,11 @@ class Twitter_Scraper:
         # User agent of a andoird smartphone device
         header="Mozilla/5.0 (Linux; Android 11; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.5414.87 Mobile Safari/537.36"
 
-        # browser_option = ChromeOptions()
-        browser_option = FirefoxOptions()
+        if browser == "chrome":
+            browser_option = ChromeOptions()
+        elif browser == "firefox":
+            browser_option = FirefoxOptions()
+        
         browser_option.add_argument("--no-sandbox")
         browser_option.add_argument("--disable-dev-shm-usage")
         browser_option.add_argument("--ignore-certificate-errors")
@@ -163,39 +107,44 @@ class Twitter_Scraper:
             browser_option.add_argument("--headless")
 
         try:
-            # print("Initializing ChromeDriver...")
-            # driver = webdriver.Chrome(
-            #     options=browser_option,
-            # )
+            if browser == "chrome":
+                print("Initializing ChromeDriver...")
+                driver = webdriver.Chrome(
+                    options=browser_option,
+                )
 
-            print("Initializing FirefoxDriver...")
-            driver = webdriver.Firefox(
-                options=browser_option,
-            )
+            elif browser == "firefox":
+                print("Initializing FirefoxDriver...")
+                driver = webdriver.Firefox(
+                    options=browser_option,
+                )
 
             print("WebDriver Setup Complete")
             return driver
+        
         except WebDriverException:
             try:
-                # print("Downloading ChromeDriver...")
-                # chromedriver_path = ChromeDriverManager().install()
-                # chrome_service = ChromeService(executable_path=chromedriver_path)
+                if browser == "chrome":
+                    print("Downloading ChromeDriver...")
+                    chromedriver_path = ChromeDriverManager().install()
+                    chrome_service = ChromeService(executable_path=chromedriver_path)
 
-                # print("Initializing ChromeDriver...")
-                # driver = webdriver.Chrome(
-                #     service=chrome_service,
-                #     options=browser_option,
-                # )
+                    print("Initializing ChromeDriver...")
+                    driver = webdriver.Chrome(
+                        service=chrome_service,
+                        options=browser_option,
+                    )
 
-                print("Downloading FirefoxDriver...")
-                firefoxdriver_path = GeckoDriverManager().install()
-                firefox_service = FirefoxService(executable_path=firefoxdriver_path)
+                elif browser == "firefox":
+                    print("Downloading FirefoxDriver...")
+                    firefoxdriver_path = GeckoDriverManager().install()
+                    firefox_service = FirefoxService(executable_path=firefoxdriver_path)
 
-                print("Initializing FirefoxDriver...")
-                driver = webdriver.Firefox(
-                    service=firefox_service,
-                    options=browser_option,
-                )
+                    print("Initializing FirefoxDriver...")
+                    driver = webdriver.Firefox(
+                        service=firefox_service,
+                        options=browser_option,
+                    )
 
                 print("WebDriver Setup Complete")
                 return driver
@@ -229,14 +178,11 @@ class Twitter_Scraper:
 
             if auth_token is None:
                 raise ValueError(
-                    """This may be due to the following:
-
-- Internet connection is unstable
-- Username is incorrect
-- Password is incorrect
-"""
+                    "This may be due to the following:\n"
+                    "- Internet connection is unstable\n"
+                    "- Username is incorrect\n"
+                    "- Password is incorrect"
                 )
-
             print()
             print("Login Successful")
             print()
@@ -265,12 +211,11 @@ class Twitter_Scraper:
                 if input_attempt >= 3:
                     print()
                     print(
-                        """There was an error inputting the username.
-
-It may be due to the following:
-- Internet connection is unstable
-- Username is incorrect
-- Twitter is experiencing unusual activity"""
+                        "There was an error inputting the username.\n\n"
+                        "It may be due to the following:\n"
+                        "- Internet connection is unstable\n"
+                        "- Username is incorrect\n"
+                        "- Twitter is experiencing unusual activity"
                     )
                     self.driver.quit()
                     sys.exit(1)
@@ -313,12 +258,11 @@ It may be due to the following:
                 if input_attempt >= 3:
                     print()
                     print(
-                        """There was an error inputting the password.
-
-It may be due to the following:
-- Internet connection is unstable
-- Password is incorrect
-- Twitter is experiencing unusual activity"""
+                        "There was an error inputting the password.\n\n"
+                        "It may be due to the following:\n"
+                        "- Internet connection is unstable\n"
+                        "- Password is incorrect\n"
+                        "- Twitter is experiencing unusual activity"
                     )
                     self.driver.quit()
                     sys.exit(1)
@@ -326,10 +270,13 @@ It may be due to the following:
                     print("Re-attempting to input password...")
                     sleep(2)
 
-    def go_to_home(self):
+    def go_to_timeline(self):
         self.driver.get("https://twitter.com/home")
         sleep(3)
-        pass
+
+    def go_to_url(self, url=None):
+        self.driver.get(url)
+        sleep(3)
 
     def go_to_profile(self):
         if (
@@ -436,58 +383,25 @@ It may be due to the following:
                 # Handle any clicking errors gracefully
                 continue 
         
-    def scrape_timeline_tweets(
+    def scrape_tweets(
         self,
-        max_tweets=50,
-        no_tweets_limit=False,
-        scrape_username=None,
-        scrape_hashtag=None,
-        scrape_bookmarks=False,
-        scrape_query=None,
-        scrape_list=None,
-        scrape_latest=True,
-        scrape_top=False,
-        scrape_poster_details=False,
-        router=None,
+        max_tweets: int = 50,
+        mode: str = "timeline",
+        no_tweets_limit: bool = False,
+        scrape_poster_details: bool = False,
+        url: str = None
     ):
-        self._config_scraper(
-            max_tweets,
-            scrape_username,
-            scrape_hashtag,
-            scrape_bookmarks,
-            scrape_query,
-            scrape_list,
-            scrape_latest,
-            scrape_top,
-            scrape_poster_details,
-        )
+        # set the router and route accordingly
+        self._route(mode, url=url)
+        progress = Progress(0, max_tweets)
+        scroller = Scroller(self.driver)
 
-        if router is None:
-            router = self.router
-
-        router()
-
-        if self.scraper_details["type"] == "Username":
-            print(
-                "Scraping Tweets from @{}...".format(self.scraper_details["username"])
-            )
-        elif self.scraper_details["type"] == "Hashtag":
-            print(
-                "Scraping {} Tweets from #{}...".format(
-                    self.scraper_details["tab"], self.scraper_details["hashtag"]
-                )
-            )
-        elif self.scraper_details["type"] == "Bookmarks":
-            print(
-                "Scraping Tweets from bookmarks...".format(self.scraper_details["username"]))
-        elif self.scraper_details["type"] == "Query":
-            print(
-                "Scraping {} Tweets from {} search...".format(
-                    self.scraper_details["tab"], self.scraper_details["query"]
-                )
-            )
-        elif self.scraper_details["type"] == "Home":
+        if mode == "timeline":
             print("Scraping Tweets from Home...")
+        elif mode == "conversation":
+            print(f"Scraping Tweets from conversation: {url} ...")
+        else:
+            raise NotImplementedError(f"Mode {mode} is not implemented.")
 
         # Accept cookies to make the banner disappear
         try:
@@ -497,28 +411,47 @@ It may be due to the following:
         except NoSuchElementException:
             pass
 
-        self.progress.print_progress(0, False, 0, no_tweets_limit)
+        progress.print_progress(0, False, 0, no_tweets_limit)
 
         refresh_count = 0
         added_tweets = 0
         empty_count = 0
         retry_cnt = 0
         data = []
+        tweet_ids = set()
+        discover_more_boundary = False
 
-        while self.scroller.scrolling:
+        while scroller.scrolling:
             try:
+                
+                # Find the "Discover more" section position for boundary check
+                try:
+                    discover_more_element = self.driver.find_element(
+                        "xpath", '//span[text()="Discover more"]'
+                    )
+                    discover_more_position = discover_more_element.location['y']
+                except NoSuchElementException:
+                    # If "Discover more" not found, include all tweets
+                    discover_more_position = float('inf')
+
                 self._click_all_show_more_buttons()
                 tweet_cards = self.get_tweet_cards()
                 added_tweets = 0
 
                 for card in tweet_cards[-15:]:
                     try:
+                        tweet_position = card.location['y']
+                        if tweet_position >= discover_more_position:
+                            # Skip tweets that are after "Discover more"
+                            discover_more_boundary = True
+                            break
+
                         tweet_id = str(card)
 
-                        if tweet_id not in self.tweet_ids:
-                            self.tweet_ids.add(tweet_id)
+                        if tweet_id not in tweet_ids:
+                            tweet_ids.add(tweet_id)
 
-                            if not self.scraper_details["poster_details"]:
+                            if not scrape_poster_details:
                                 self.driver.execute_script(
                                     "arguments[0].scrollIntoView();", card
                                 )
@@ -528,9 +461,7 @@ It may be due to the following:
                                 card=card,
                                 driver=self.driver,
                                 actions=self.actions,
-                                scrape_poster_details=self.scraper_details[
-                                    "poster_details"
-                                ],
+                                scrape_poster_details=scrape_poster_details
                             )
 
                             if tweet:
@@ -538,10 +469,10 @@ It may be due to the following:
                                     if not tweet.is_ad:
                                         data.append(tweet.tweet)
                                         added_tweets += 1
-                                        self.progress.print_progress(len(data), False, 0, no_tweets_limit)
+                                        progress.print_progress(len(data), False, 0, no_tweets_limit)
 
-                                        if len(data) >= self.max_tweets and not no_tweets_limit:
-                                            self.scroller.scrolling = False
+                                        if len(data) >= max_tweets and not no_tweets_limit:
+                                            scroller.scrolling = False
                                             break
                                     else:
                                         continue
@@ -553,7 +484,7 @@ It may be due to the following:
                     except NoSuchElementException:
                         continue
 
-                if len(data) >= self.max_tweets and not no_tweets_limit:
+                if discover_more_boundary or (len(data) >= max_tweets and not no_tweets_limit):
                     break
 
                 if added_tweets == 0:
@@ -562,7 +493,7 @@ It may be due to the following:
                         while retry_cnt < 15:
                             retry_button = self.driver.find_element(
                             "xpath", "//span[text()='Retry']/../../..")
-                            self.progress.print_progress(len(data), True, retry_cnt, no_tweets_limit)
+                            progress.print_progress(len(data), True, retry_cnt, no_tweets_limit)
                             sleep(600)
                             retry_button.click()
                             retry_cnt += 1
@@ -570,7 +501,7 @@ It may be due to the following:
                     # There is no Retry button so the counter is reseted
                     except NoSuchElementException:
                         retry_cnt = 0
-                        self.progress.print_progress(len(data), False, 0, no_tweets_limit)
+                        progress.print_progress(len(data), False, 0, no_tweets_limit)
 
                     if empty_count >= 5:
                         if refresh_count >= 3:
@@ -598,128 +529,15 @@ It may be due to the following:
 
         print("")
 
-        if len(data) >= self.max_tweets or no_tweets_limit:
+        if len(data) >= max_tweets or no_tweets_limit or mode == "conversation":
             print("Scraping Complete")
         else:
             print("Scraping Incomplete")
 
         if not no_tweets_limit:
-            print("Tweets: {} out of {}\n".format(len(data), self.max_tweets))
+            print("Tweets: {} out of {}\n".format(len(data), max_tweets))
 
         return data
-
-    def scrape_tweet_conversation(
-        self,
-        conversation_url: str,
-        max_tweets: int = 50,
-    ):
-        """
-        given a tweet url get all the tweets within the conversation, i.e., 
-        the tweet's replies and possibly sub-threads, especially when author
-        has written sub-tweets.
-        logic is to get all tweets or up to max_tweets before the "Discover more" 
-        section: by observation it's found that the end of a thread is marked
-        by the start of the "Discover more" section (if present at all).
-        """
-        try:
-            # get the tweet
-            self.driver.get(conversation_url)
-            # wait for the tweet to load
-            sleep(3)
-
-            # Prepare the conversation
-            conversation = []
-            seen_tweet_ids = set()  # Track processed tweet IDs to avoid duplicates
-            consecutive_empty_scrolls = 0
-            max_empty_scrolls = 3
-            discover_more_boundary = False
-            
-            # Main scrolling loop to collect tweets
-            while not discover_more_boundary and len(conversation) < max_tweets and consecutive_empty_scrolls < max_empty_scrolls:
-                
-                self._click_all_show_more_buttons()
-                
-                # Find the "Discover more" section position for boundary check
-                try:
-                    discover_more_element = self.driver.find_element(
-                        "xpath", '//span[text()="Discover more"]'
-                    )
-                    discover_more_position = discover_more_element.location['y']
-                except NoSuchElementException:
-                    # If "Discover more" not found, include all tweets
-                    discover_more_position = float('inf')
-                
-                # Get all current visible tweet cards
-                current_tweet_cards = self.driver.find_elements(
-                    "xpath", '//article[@data-testid="tweet" and not(@disabled)]'
-                )
-                
-                # Track how many new tweets we find in this iteration
-                new_tweets_found = 0
-                
-                # Process visible tweet cards
-                for card in current_tweet_cards:
-                    if len(conversation) >= max_tweets:
-                        break
-                    
-                    try:
-                        # Check if tweet is before "Discover more" boundary
-                        tweet_position = card.location['y']
-                        if tweet_position >= discover_more_position:
-                            # Skip tweets that are after "Discover more"
-                            discover_more_boundary = True
-                            break
-                        
-                        # Extract tweet ID using the same logic as Tweet class
-                        tweet_link = card.find_element(
-                            "xpath", ".//a[contains(@href, '/status/')]"
-                        ).get_attribute("href")
-                        tweet_id = str(tweet_link.split("/")[-1])
-                        
-                        # Skip if we've already processed this tweet
-                        if tweet_id in seen_tweet_ids:
-                            continue
-                        
-                        seen_tweet_ids.add(tweet_id)
-                        
-                        # Create Tweet object and process
-                        tweet = Tweet(
-                            card=card,
-                            driver=self.driver,
-                            actions=self.actions,
-                            scrape_poster_details=self.scraper_details["poster_details"],
-                        )
-                        
-                        if tweet and not tweet.error and tweet.tweet is not None:
-                            if not tweet.is_ad:
-                                conversation.append(tweet.tweet)
-                                new_tweets_found += 1
-                                
-                    except Exception as e:
-                        # Skip tweets we can't process
-                        continue
-                
-                # Update consecutive empty scroll counter
-                if new_tweets_found == 0:
-                    consecutive_empty_scrolls += 1
-                else:
-                    consecutive_empty_scrolls = 0
-                
-                # Scroll down to load more tweets (unless we've hit limits)
-                if not discover_more_boundary and len(conversation) < max_tweets and consecutive_empty_scrolls < max_empty_scrolls:
-                    self.driver.execute_script("window.scrollBy(0, 500);")
-                    sleep(2)
-            
-            return conversation
-        
-        except KeyboardInterrupt:
-            print("\n")
-            print("Keyboard Interrupt")
-        
-        except Exception as e:
-            print("\n")
-            print(f"Error scraping tweets: {e}")
-
     
     def _save_helper(self, data):
         now = datetime.now()

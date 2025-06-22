@@ -152,6 +152,14 @@ def main():
             help="URL to specific tweet or conversation to scrape",
         )
 
+        parser.add_argument(
+            "--browser",
+            type=str,
+            default="firefox",
+            help="Browser to use for scraping. [chrome/firefox]",
+            choices=["chrome", "firefox"],
+        )
+
         args = parser.parse_args()
 
         USER_MAIL = args.mail
@@ -199,29 +207,26 @@ def main():
 
         if USER_UNAME is not None and USER_PASSWORD is not None:
             scraper = Twitter_Scraper(
-                mail=USER_MAIL,
                 username=USER_UNAME,
                 password=USER_PASSWORD,
-                headlessState=HEADLESS_MODE
+                headlessState=HEADLESS_MODE,
+                browser=args.browser,
             )
             scraper.login()
             if args.mode == "timeline":
-                data = scraper.scrape_timeline_tweets(
+                data = scraper.scrape_tweets(
                     max_tweets=args.tweets,
                     no_tweets_limit= args.no_tweets_limit if args.no_tweets_limit is not None else True,
-                    scrape_username=args.username,
-                    scrape_hashtag=args.hashtag,
-                    scrape_bookmarks=args.bookmarks,
-                    scrape_query=args.query,
-                    scrape_list=args.list,
-                    scrape_latest=args.latest,
-                    scrape_top=args.top,
+                    mode=args.mode,
                     scrape_poster_details="pd" in additional_data,
                 )
             elif args.mode == "conversation":
-                data = scraper.scrape_tweet_conversation(
-                    conversation_url=args.url,
-                    max_tweets=args.tweets
+                data = scraper.scrape_tweets(
+                    max_tweets=args.tweets,
+                    no_tweets_limit= args.no_tweets_limit if args.no_tweets_limit is not None else True,
+                    mode=args.mode,
+                    scrape_poster_details="pd" in additional_data,
+                    url=args.url
                 )
             else:
                 raise ValueError("Invalid mode:", args.mode)
