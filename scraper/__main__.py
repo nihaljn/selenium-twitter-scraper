@@ -237,7 +237,7 @@ def main():
             else:
                 raise ValueError("Invalid save mode:", args.save_mode)
             if not scraper.interrupted:
-                scraper.driver.close()
+                scraper.close()
         else:
             print(
                 "Missing Twitter username or password environment variables. Please check your .env file."

@@ -1,6 +1,6 @@
 from selenium.webdriver.remote.webelement import WebElement
 
-from card import Card
+from .card import Card
 
 
 class Quote(Card):

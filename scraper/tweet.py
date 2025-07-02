@@ -6,9 +6,9 @@ from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.remote.webelement import WebElement
 
-from card import Card
-from quote import Quote
-from utils import resolve_short_url
+from .card import Card
+from .quote import Quote
+from .utils import resolve_short_url
 
 
 class Tweet(Card):

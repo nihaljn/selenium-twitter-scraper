@@ -1,9 +1,9 @@
 import os
 import sys
 import pandas as pd
-from progress import Progress
-from scroller import Scroller
-from tweet import Tweet
+from .progress import Progress
+from .scroller import Scroller
+from .tweet import Tweet
 
 from datetime import datetime
 from time import sleep
@@ -50,6 +50,7 @@ class Twitter_Scraper:
         self.save_folder_path = save_folder_path
         self.driver = self._get_driver(proxy, browser)
         self.actions = ActionChains(self.driver)
+        self.logged_in = False
 
     def _route(self, mode, url: str | None):
         # configure current scraping session
@@ -186,6 +187,7 @@ class Twitter_Scraper:
             print()
             print("Login Successful")
             print()
+            self.logged_in = True
         except Exception as e:
             print()
             print(f"Login Failed: {e}")
@@ -567,3 +569,14 @@ class Twitter_Scraper:
         file_path = os.path.join(self.save_folder_path, f"{file_name}.jsonl")
         df.to_json(file_path, orient="records", lines=True)
         print("JSONL Saved: {}".format(file_path))
+
+    def close(self):
+        if self.driver is not None:
+            self.driver.quit()
+            print("Closed session.")
+            self.logged_in = False
+        else:
+            print("Driver is already closed.")
+
+    def is_logged_in(self):
+        return self.logged_in
