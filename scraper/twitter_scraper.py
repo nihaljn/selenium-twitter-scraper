@@ -37,6 +37,7 @@ class Twitter_Scraper:
         self,
         username,
         password,
+        email,
         headlessState,
         save_folder_path="./tweets/",
         proxy=None,
@@ -45,6 +46,7 @@ class Twitter_Scraper:
         print("Initializing Twitter Scraper...")
         self.username = username
         self.password = password
+        self.unusual_activity_resolution = email
         self.headlessState = headlessState
         self.interrupted = False
         self.save_folder_path = save_folder_path
@@ -233,7 +235,7 @@ class Twitter_Scraper:
                 unusual_activity = self.driver.find_element(
                     "xpath", "//input[@data-testid='ocfEnterTextTextInput']"
                 )
-                unusual_activity.send_keys(self.username)
+                unusual_activity.send_keys(self.unusual_activity_resolution)
                 unusual_activity.send_keys(Keys.RETURN)
                 sleep(3)
                 break

@@ -2,7 +2,7 @@ import os
 import sys
 import argparse
 import getpass
-from twitter_scraper import Twitter_Scraper
+from .twitter_scraper import Twitter_Scraper
 
 try:
     from dotenv import load_dotenv
@@ -44,6 +44,13 @@ def main():
                 type=str,
                 default=os.getenv("TWITTER_USERNAME"),
                 help="Your Twitter username.",
+            )
+
+            parser.add_argument(
+                "--email",
+                type=str,
+                default=os.getenv("TWITTER_EMAIL"),
+                help="Your Twitter email.",
             )
 
             parser.add_argument(
@@ -209,6 +216,7 @@ def main():
             scraper = Twitter_Scraper(
                 username=USER_UNAME,
                 password=USER_PASSWORD,
+                email=USER_MAIL,
                 headlessState=HEADLESS_MODE,
                 browser=args.browser,
             )

@@ -9,10 +9,10 @@ from _utils import Difference
 
 # imports for the package
 import sys
-path_to_scraper_package = Path(__file__).parent.parent / "scraper"
+path_to_scraper_package = Path(__file__).parent.parent
 sys.path.insert(0, str(path_to_scraper_package))
 
-from tweet import Tweet
+from scraper.tweet import Tweet
 
 
 class TestImagesInMainAndQuoteTweet:
